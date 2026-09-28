@@ -261,6 +261,18 @@ details[open] summary { margin-bottom: 8px; }
   <h1>发掘记录表生成器</h1>
   <div class="sub">选一选、填一填 → 一键导出 Word / Excel / PDF · 支持地层与遗迹两类记录</div>
 </header>
+<div id="mobile-tip" style="display:none;padding:10px 16px;background:#fff8e1;color:#664d03;border-bottom:1px solid #ffe69c;font-size:13px;line-height:1.6;">
+  📱 <b>手机端提示</b>：Word / PDF 在部分手机浏览器上导出会空白，Excel 可用。<b>推荐流程</b>：手机填完 → 点下方按钮存 JSON → 传到电脑 → 电脑上"加载草稿"再导出。
+  <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+    <button onclick="saveDraft()" style="padding:6px 14px;background:#664d03;color:#fff;border:none;border-radius:4px;font-size:13px;cursor:pointer;font-weight:600">💾 立即保存草稿(JSON)</button>
+    <button onclick="this.parentElement.parentElement.style.display='none'" style="padding:6px 12px;border:1px solid #ffe69c;background:#fff;border-radius:4px;font-size:12px;cursor:pointer">知道了</button>
+  </div>
+</div>
+<script>
+if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+  document.getElementById('mobile-tip').style.display = 'block';
+}
+</script>
 <div class="tabs">
   <button class="tab active" data-tab="diceng">地层记录</button>
   <button class="tab" data-tab="yiji">遗迹记录</button>
