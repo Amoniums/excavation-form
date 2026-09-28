@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>发掘记录表生成器</title>
+<meta name="description" content="将地层与遗迹发掘记录表分解为可选择的选项，做完选择题后一键生成 Word / Excel / PDF">
+<style>
+:root {
+  --bg: #faf7f2;
+  --panel: #ffffff;
+  --ink: #1e2530;
+  --muted: #6b7280;
+  --line: #e5ded2;
+  --line-strong: #c9c1b1;
+  --accent: #6b7f66;
+  --accent-ink: #2e3a2c;
+  --accent-soft: #eef1e8;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --radius: 6px;
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+:root:not([data-theme="light"]) {
+  @media (prefers-color-scheme: dark) {
+    --bg: #14171c;
+    --panel: #1c2028;
+    --ink: #e6e3dd;
+    --muted: #9aa1ad;
+    --line: #2a2f3a;
+    --line-strong: #3a4150;
+    --accent: #9db597;
+    --accent-ink: #cddac7;
+    --accent-soft: #232a26;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171c;
+  --panel: #1c2028;
+  --ink: #e6e3dd;
+  --muted: #9aa1ad;
+  --line: #2a2f3a;
+  --line-strong: #3a4150;
+  --accent: #9db597;
+  --accent-ink: #cddac7;
+  --accent-soft: #232a26;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+header {
+  padding: 20px 16px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+header h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+header .sub {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.tab {
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-family: inherit;
+}
+.tab.active {
+  background: var(--bg);
+  color: var(--accent-ink);
+  border-color: var(--line-strong);
+  font-weight: 600;
+  position: relative;
+  top: 1px;
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.card h3 {
+  margin: 16px 0 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.field label {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.field input[type="text"], .field input[type="date"], .field input[type="number"],
+.field select, .field textarea {
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13.5px;
+  background: var(--panel);
+  color: var(--ink);
+  width: 100%;
+}
+.field textarea { min-height: 60px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.choice-group {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px; border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  background: var(--bg);
+}
+.choice {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--panel); cursor: pointer; font-size: 12.5px;
+  user-select: none; transition: all 0.15s;
+}
+.choice:hover { border-color: var(--accent); }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice.checked {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink);
+  font-weight: 600;
+}
+.list-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 12.5px; }
+.list-table th, .list-table td {
+  border: 1px solid var(--line-strong); padding: 4px; text-align: left; vertical-align: top;
+}
+.list-table th { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; font-size: 12px; }
+.list-table input, .list-table select {
+  width: 100%; border: none; background: transparent; padding: 4px;
+  font-family: inherit; font-size: 12.5px; color: var(--ink);
+}
+.list-table input:focus, .list-table select:focus { outline: 1px solid var(--accent); }
+.btn {
+  padding: 7px 14px; border: 1px solid var(--line-strong); background: var(--panel);
+  color: var(--ink); border-radius: var(--radius); cursor: pointer; font-family: inherit;
+  font-size: 13px; transition: all 0.15s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary {
+  background: var(--accent); color: white; border-color: var(--accent);
+}
+.btn.primary:hover { filter: brightness(1.05); color: white; }
+.btn.small { padding: 4px 8px; font-size: 12px; }
+.btn.danger { color: var(--danger); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); margin-top: 12px; }
+.preview-wrap {
+  position: sticky; top: 16px;
+  max-height: calc(100vh - 32px); overflow-y: auto;
+}
+.preview {
+  background: white;
+  color: #000;
+  padding: 20mm 12mm;
+  font-family: "SimSun", "Songti SC", "STSong", serif;
+  font-size: 10.5pt;
+  line-height: 1.35;
+}
+.preview .head {
+  text-align: center;
+  font-family: "SimHei", "Heiti SC", "STHeiti", "PingFang SC", sans-serif;
+  font-size: 16pt;
+  font-weight: normal;
+  padding: 0 0 8pt 0;
+}
+.preview table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 0.5pt solid #000;
+  table-layout: fixed;
+}
+.preview table td {
+  border: 0.5pt solid #000;
+  padding: 3pt 4pt;
+  vertical-align: middle;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  font-size: 10.5pt;
+  min-height: 18pt;
+}
+.preview td.lbl { font-weight: bold; text-align: center; }
+.preview td.sec { text-align: left; font-weight: bold; padding-left: 6pt; }
+.preview td.ctr { text-align: center; }
+.preview td.val { min-height: 22pt; }
+.preview td.empty { color: #999; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.value-summary { font-size: 12px; color: var(--accent-ink); margin-top: 4px; min-height: 16px; }
+.toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.toggle-theme { margin-left: auto; }
+details { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; background: var(--bg); }
+details summary { cursor: pointer; font-weight: 600; color: var(--accent-ink); font-size: 13px; }
+details[open] summary { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>发掘记录表生成器</h1>
+  <div class="sub">选一选、填一填 → 一键导出 Word / Excel / PDF · 支持地层与遗迹两类记录</div>
+</header>
+<div class="tabs">
+  <button class="tab active" data-tab="diceng">地层记录</button>
+  <button class="tab" data-tab="yiji">遗迹记录</button>
+  <button class="btn small toggle-theme" style="margin-left:auto;margin-bottom:6px" onclick="toggleTheme()">☾ 切换主题</button>
+</div>
+
+<main>
+  <section class="card" id="form-panel">
+    <!-- 表单在这里由 JS 渲染 -->
+  </section>
+  <section class="preview-wrap">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <strong style="font-size:14px">预览</strong>
+        <span class="hint" style="margin:0">↓ 下方即最终输出效果</span>
+        <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn small primary" onclick="exportWord()">导出 Word</button>
+          <button class="btn small primary" onclick="exportExcel()">导出 Excel</button>
+          <button class="btn small primary" onclick="exportPDF()">导出 PDF</button>
+        </div>
+      </div>
+      <div id="preview" class="preview"></div>
+      <div style="padding:8px 16px;border-top:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn small" onclick="saveDraft()">保存草稿(JSON)</button>
+        <button class="btn small" onclick="document.getElementById('load-input').click()">加载草稿</button>
+        <input type="file" id="load-input" style="display:none" accept=".json" onchange="loadDraft(event)">
+        <button class="btn small danger" onclick="if(confirm('清空当前表单？')) resetForm()">清空</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+<script>
+/* ============ 数据字典（从样表提取） ============ */
+const DICT = {
+  hue: ['深', '浅', '无'],
+  color: ['红', '灰', '黑', '褐', '黄', '绿', '青', '无'],
+  soil: ['砾石','粗砂土','细砂土','粉砂土','黏土','砂质黏土','粉质黏土','粉质沙土','粘质粉土','粉质沙','含粘土沙','淤泥','沙质淤泥','泥沙'],
+  compact: ['疏松','较疏松','较致密','致密'],
+  shape: ['坡状','坑状','筒状','袋状','水平状','波状','凸镜状','凹镜状','蹄形','其它'],
+  preserve: ['好','较好','一般','较差','差'],
+  excavate: ['由晚到早顺序发掘','分层清理','套箱提取','其它'],
+  planShape: ['圆形','椭圆形','方形','长方形','条形','环状扇形','不规则形'],
+  sectionShape: ['锥形圜底','筒形圜底','袋形圜底','弧形圜底','锥形平底','筒形平底','袋形平底','弧形平底','锥形尖底','筒形尖底','袋形尖底','弧形尖底'],
+  clarity: ['明显','较明显','不明显'],
+  bearing: ['东北','西南','西北','东南','东','西','南','北','中'],
+  roundness: ['棱角','略有棱角','较有棱角','磨圆','较磨圆'],
+  sorting: ['好','较好','一般','较差','差'],
+  含物内容: ['陶','瓷','砖','瓦','石','骨角','红烧土','木炭','贝壳','铁','铜','其它'],
+  样品种类: ['陶片','瓷片','原始瓷','小件','红烧土','木炭','浮选土','测年样品','孢粉样品','动物骨骼','植物遗存','其它'],
+  单位: ['袋','件','管','瓶','盒','片'],
+  堆积性质: ['现代耕土层','扰土层','文化堆积层','废弃堆积','使用面','建筑倒塌','洪积/冲积','生土'],
+};
+
+/* ============ 数据模型 ============ */
+const defaultCommon = () => ({
+  year: '2026', site: '江苏省镇江市句容市上邹村遗址',
+  district: '', fangHao: '', unit: '', duiji: '',
+  recordTime: new Date().toISOString().slice(0,10), recorder: '',
+  地层关系: '', 上层: '', surfaceHi: '', surfaceHiVal:'', surfaceLo:'', surfaceLoVal:'',
+  bottomHi:'', bottomHiVal:'', bottomLo:'', bottomLoVal:'',
+  hou最厚:'', hou最薄:'',
+  bulk_samples: [],    // 全部采集
+  specimen_samples: [], // 样品采集
+  notes: '',
+});
+const defaultDiceng = () => ({
+  ...defaultCommon(),
+  __type: 'diceng',
+  hue: '', accentColor: '', mainColor: '', colorNote: '',
+  soil: [], colorCode: '',
+  性质: '', 致密度: '', 形状: '', 保存状态: '', 发掘方式: '',
+  contains: [],
+});
+const defaultYiji = () => ({
+  ...defaultCommon(),
+  __type: 'yiji',
+  平面形状: '', 剖面形状: '', 器物: '',
+  壁面: '', 底面: '', 深度: '',
+  口部: '', 口最长: '', 口最宽: '',
+  底部: '', 底最长: '', 底最宽: '',
+});
+
+let state = defaultDiceng();
+let currentTab = 'diceng';
+
+/* ============ 渲染工具 ============ */
+function h(tag, attrs = {}, children = []) {
+  const el = document.createElement(tag);
+  for (const k in attrs) {
+    if (k === 'class') el.className = attrs[k];
+    else if (k === 'style') el.style.cssText = attrs[k];
+    else if (k.startsWith('on')) el[k.toLowerCase()] = attrs[k];
+    else el.setAttribute(k, attrs[k]);
+  }
+  (Array.isArray(children) ? children : [children]).forEach(c => {
+    if (c == null) return;
+    if (typeof c === 'string') el.appendChild(document.createTextNode(c));
+    else el.appendChild(c);
+  });
+  return el;
+}
+function textField(label, key, placeholder='') {
+  const wrap = h('div', {class:'field'});
+  wrap.appendChild(h('label', {}, label));
+  const inp = h('input', {type:'text', placeholder, value: state[key] || ''});
+  inp.oninput = () => { state[key] = inp.value; renderPreview(); };
+  wrap.appendChild(inp);
+  return wrap;
+}
+function numField(label, key, unit='') {
+  const wrap = h('div', {class:'field'});
+  wrap.appendChild(h('label', {}, label + (unit ? ` (${unit})` : '')));
+  const inp = h('input', {type:'text', placeholder: unit, value: state[key] || ''});
+  inp.oninput = () => { state[key] = inp.value; renderPreview(); };
+  wrap.appendChild(inp);
+  return wrap;
+}
+function selectField(label, key, options) {
+  const wrap = h('div', {class:'field'});
+  wrap.appendChild(h('label', {}, label));
+  const sel = h('select');
+  sel.appendChild(h('option', {value:''}, '-- 选择 --'));
+  options.forEach(o => sel.appendChild(h('option', {value:o}, o)));
+  sel.value = state[key] || '';
+  sel.onchange = () => { state[key] = sel.value; renderPreview(); };
+  wrap.appendChild(sel);
+  return wrap;
+}
+function choiceGroup(label, key, options, multi=false) {
+  const wrap = h('div', {class:'field'});
+  wrap.appendChild(h('label', {}, label + (multi ? ' (可多选)' : '')));
+  const grp = h('div', {class:'choice-group'});
+  options.forEach(opt => {
+    const chip = h('label', {class:'choice'});
+    const inp = h('input', {type: multi ? 'checkbox' : 'radio', name: key, value: opt});
+    const val = state[key];
+    const isChecked = multi ? (Array.isArray(val) && val.includes(opt)) : val === opt;
+    if (isChecked) { inp.checked = true; chip.classList.add('checked'); }
+    inp.onchange = () => {
+      if (multi) {
+        const arr = Array.isArray(state[key]) ? [...state[key]] : [];
+        if (inp.checked) arr.push(opt);
+        else arr.splice(arr.indexOf(opt), 1);
+        state[key] = arr;
+      } else {
+        state[key] = inp.checked ? opt : '';
+      }
+      renderForm(); renderPreview();
+    };
+    chip.appendChild(inp);
+    chip.appendChild(h('span', {}, opt));
+    grp.appendChild(chip);
+  });
+  wrap.appendChild(grp);
+  return wrap;
+}
+function textArea(label, key, rows=2) {
+  const wrap = h('div', {class:'field'});
+  wrap.appendChild(h('label', {}, label));
+  const ta = h('textarea', {rows: String(rows), placeholder:'自由填写'});
+  ta.value = state[key] || '';
+  ta.oninput = () => { state[key] = ta.value; renderPreview(); };
+  wrap.appendChild(ta);
+  return wrap;
+}
+
+/* 动态行表（包含物 / 样品采集） */
+function dynamicList(title, key, columns) {
+  const box = h('div');
+  box.appendChild(h('h3', {}, title));
+  const table = h('table', {class:'list-table'});
+  const thead = h('thead');
+  const trh = h('tr');
+  columns.forEach(c => trh.appendChild(h('th', {style:`width:${c.width || 'auto'}`}, c.label)));
+  trh.appendChild(h('th', {style:'width:40px'}, ''));
+  thead.appendChild(trh);
+  table.appendChild(thead);
+  const tbody = h('tbody');
+  if (!Array.isArray(state[key])) state[key] = [];
+  state[key].forEach((row, ri) => {
+    const tr = h('tr');
+    columns.forEach(c => {
+      const td = h('td');
+      let inp;
+      if (c.options) {
+        inp = h('select');
+        inp.appendChild(h('option', {value:''}, ''));
+        c.options.forEach(o => inp.appendChild(h('option', {value:o}, o)));
+        inp.value = row[c.key] || '';
+      } else {
+        inp = h('input', {type:'text', value: row[c.key] || '', placeholder: c.placeholder || ''});
+      }
+      inp.onchange = inp.oninput = () => { row[c.key] = inp.value; renderPreview(); };
+      td.appendChild(inp);
+      tr.appendChild(td);
+    });
+    const delTd = h('td');
+    const del = h('button', {class:'btn small danger'}, '×');
+    del.onclick = () => { state[key].splice(ri, 1); renderForm(); renderPreview(); };
+    delTd.appendChild(del);
+    tr.appendChild(delTd);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  box.appendChild(table);
+  const add = h('button', {class:'btn small'}, '+ 添加一行');
+  add.onclick = () => {
+    const empty = {}; columns.forEach(c => empty[c.key] = '');
+    state[key].push(empty); renderForm(); renderPreview();
+  };
+  box.appendChild(add);
+  return box;
+}
+
+/* ============ 表单渲染 ============ */
+function renderCommon() {
+  const wrap = h('div');
+  wrap.appendChild(h('h2', {}, '基本信息'));
+  const r1 = h('div', {class:'row-3'});
+  r1.appendChild(textField('年度', 'year'));
+  r1.appendChild(textField('遗址名称', 'site'));
+  r1.appendChild(textField('分区号', 'district', '东区/西区…'));
+  wrap.appendChild(r1);
+  const r2 = h('div', {class:'row-3'});
+  r2.appendChild(textField('探方号', 'fangHao', 'TS07E18'));
+  r2.appendChild(textField('单位号', 'unit'));
+  r2.appendChild(textField('堆积号', 'duiji', '①、①b、H1…'));
+  wrap.appendChild(r2);
+  const r3 = h('div', {class:'row-3'});
+  const timeF = h('div', {class:'field'});
+  timeF.appendChild(h('label', {}, '记录时间'));
+  const timeI = h('input', {type:'date', value: state.recordTime});
+  timeI.onchange = () => { state.recordTime = timeI.value; renderPreview(); };
+  timeF.appendChild(timeI);
+  r3.appendChild(timeF);
+  r3.appendChild(textField('记录者', 'recorder'));
+  wrap.appendChild(r3);
+
+  const r3b = h('div', {class:'row'});
+  r3b.appendChild(textField('地层关系', '地层关系', '如：①→①b（打破/叠压/共存等）'));
+  r3b.appendChild(textField('上层', '上层', '如：无 / ① / ②a'));
+  wrap.appendChild(r3b);
+
+  wrap.appendChild(h('h3', {}, '高程与厚度'));
+  const gg = h('div', {class:'row-4'});
+  gg.appendChild(textField('表面·最高·方位', 'surfaceHi', '东北'));
+  gg.appendChild(numField('表面·最高·高程', 'surfaceHiVal', 'm'));
+  gg.appendChild(textField('表面·最低·方位', 'surfaceLo', '西南'));
+  gg.appendChild(numField('表面·最低·高程', 'surfaceLoVal', 'm'));
+  wrap.appendChild(gg);
+  const gg2 = h('div', {class:'row-4'});
+  gg2.appendChild(textField('底面·最高·方位', 'bottomHi', '东北'));
+  gg2.appendChild(numField('底面·最高·高程', 'bottomHiVal', 'm'));
+  gg2.appendChild(textField('底面·最低·方位', 'bottomLo', '西南'));
+  gg2.appendChild(numField('底面·最低·高程', 'bottomLoVal', 'm'));
+  wrap.appendChild(gg2);
+  const gg3 = h('div', {class:'row-4'});
+  gg3.appendChild(numField('最厚', 'hou最厚', 'm'));
+  gg3.appendChild(numField('最薄', 'hou最薄', 'm'));
+  wrap.appendChild(gg3);
+  return wrap;
+}
+
+function renderDicengFields() {
+  const wrap = h('div');
+  wrap.appendChild(h('h2', {}, '堆积描述'));
+
+  // 土色
+  wrap.appendChild(choiceGroup('土色·色调', 'hue', DICT.hue));
+  wrap.appendChild(choiceGroup('土色·辅色', 'accentColor', DICT.color));
+  wrap.appendChild(choiceGroup('土色·主色', 'mainColor', DICT.color));
+  const summary = h('div', {class:'value-summary'},
+    '组合结果：' + ((state.hue || '') + (state.accentColor || '') + (state.mainColor ? state.mainColor + '色' : '')));
+  wrap.appendChild(summary);
+  wrap.appendChild(textField('土色·补充说明', 'colorNote', '如：黄褐色；浅灰黄'));
+
+  // 土色编码
+  wrap.appendChild(textField('土色编码', 'colorCode', 'Munsell 编码等（可空）'));
+
+  // 土质
+  wrap.appendChild(choiceGroup('土质', 'soil', DICT.soil, true));
+
+  // 堆积性质
+  wrap.appendChild(selectField('堆积性质', '性质', DICT.堆积性质));
+
+  // 致密度
+  wrap.appendChild(choiceGroup('致密度', '致密度', DICT.compact));
+
+  // 形状
+  wrap.appendChild(choiceGroup('形状', '形状', DICT.shape));
+
+  // 保存状态、发掘方式
+  const r = h('div', {class:'row'});
+  r.appendChild(selectField('保存状态', '保存状态', DICT.preserve));
+  r.appendChild(selectField('发掘方式', '发掘方式', DICT.excavate));
+  wrap.appendChild(r);
+
+  // 包含物
+  wrap.appendChild(h('h2', {style:'margin-top:20px'}, '包含物'));
+  wrap.appendChild(dynamicList('', 'contains', [
+    {key:'内容', label:'内容', options: DICT.含物内容},
+    {key:'含量', label:'含量(%)', placeholder:'3%'},
+    {key:'圆整度', label:'圆整度', options: DICT.roundness},
+    {key:'分选度', label:'分选度', options: DICT.sorting},
+  ]));
+
+  return wrap;
+}
+
+function renderYijiFields() {
+  const wrap = h('div');
+  wrap.appendChild(h('h2', {}, '形状描述'));
+  wrap.appendChild(choiceGroup('平面形状', '平面形状', DICT.planShape));
+  wrap.appendChild(choiceGroup('剖面形状', '剖面形状', DICT.sectionShape));
+  wrap.appendChild(textField('器物', '器物', '器物名称/编号（可空）'));
+  wrap.appendChild(choiceGroup('壁面', '壁面', DICT.clarity));
+  wrap.appendChild(choiceGroup('底面', '底面', DICT.clarity));
+  wrap.appendChild(numField('深度', '深度', 'm'));
+  wrap.appendChild(h('h3', {}, '口部尺寸'));
+  wrap.appendChild(choiceGroup('口部（清晰度）', '口部', DICT.clarity));
+  const r1 = h('div', {class:'row'});
+  r1.appendChild(numField('口部·最长', '口最长', 'm'));
+  r1.appendChild(numField('口部·最宽', '口最宽', 'm'));
+  wrap.appendChild(r1);
+  wrap.appendChild(h('h3', {}, '底部尺寸'));
+  wrap.appendChild(choiceGroup('底部（清晰度）', '底部', DICT.clarity));
+  const r2 = h('div', {class:'row'});
+  r2.appendChild(numField('底部·最长', '底最长', 'm'));
+  r2.appendChild(numField('底部·最宽', '底最宽', 'm'));
+  wrap.appendChild(r2);
+  return wrap;
+}
+
+function renderShared() {
+  const wrap = h('div');
+  wrap.appendChild(h('h2', {style:'margin-top:20px'}, '全部采集（标本）'));
+  const hint1 = h('div', {class:'hint'}, '出土标本、遗物按堆积单位的系统采集');
+  wrap.appendChild(hint1);
+  wrap.appendChild(dynamicList('', 'bulk_samples', [
+    {key:'种类', label:'种类', options: DICT.样品种类},
+    {key:'样品号', label:'样品号', placeholder:'2026JJSTS07E18①-1'},
+    {key:'单位', label:'单位', options: DICT.单位},
+    {key:'坐标', label:'坐标(北东高)', placeholder:'或 \\'},
+    {key:'时间', label:'时间', placeholder:'2026.9.6'},
+    {key:'说明', label:'说明', placeholder:''},
+  ]));
+  wrap.appendChild(h('h2', {style:'margin-top:20px'}, '样品采集（科技考古）'));
+  const hint2 = h('div', {class:'hint'}, '浮选土、测年样品、孢粉等专门样品');
+  wrap.appendChild(hint2);
+  wrap.appendChild(dynamicList('', 'specimen_samples', [
+    {key:'种类', label:'种类', options: DICT.样品种类},
+    {key:'样品号', label:'样品号'},
+    {key:'单位', label:'单位', options: DICT.单位},
+    {key:'坐标', label:'坐标(北东高)'},
+    {key:'时间', label:'时间'},
+    {key:'说明', label:'说明'},
+  ]));
+  wrap.appendChild(textArea('备注', 'notes', 3));
+  return wrap;
+}
+
+function renderForm() {
+  const panel = document.getElementById('form-panel');
+  panel.innerHTML = '';
+  panel.appendChild(renderCommon());
+  if (state.__type === 'diceng') panel.appendChild(renderDicengFields());
+  else panel.appendChild(renderYijiFields());
+  panel.appendChild(renderShared());
+}
+
+/* ============ 预览渲染 ============ */
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[s]);
+}
+function joinArr(a) { return Array.isArray(a) ? a.filter(Boolean).join('、') : (a || ''); }
+function colorCombo() {
+  return (state.hue || '') + (state.accentColor || '') + (state.mainColor ? state.mainColor + '色' : '') +
+    (state.colorNote ? '（' + state.colorNote + '）' : '');
+}
+/* ============ 表格模板：24 列合并布局 ============
+   使用 24 列细网格，让 最厚/最薄 能等宽拆分；同时保持
+   分区号/堆积号/地层关系 三列 label 对齐（各 2 cols）
+   cell = {t: 文本, cs: colspan, cls: 附加class, style: 内联样式, raw: 是否内嵌 HTML} */
+const GRID = 24;
+function buildRows() {
+  const isDiceng = state.__type === 'diceng';
+  const rows = [];
+  // R0 表头（年度 / 遗址名称 加粗）
+  rows.push([{
+    t: `<b>年度：</b>${esc(state.year)}年　　　　　　　　　　<b>遗址名称：</b>${esc(state.site)}`,
+    cs:24, cls:'ctr', raw:true
+  }]);
+  // R1 分区/探方/单位 —— 列宽 2|4|2|6|2|8 = 24
+  rows.push([
+    {t:'分区号', cs:2, cls:'lbl'}, {t: state.district, cs:4, cls:'val'},
+    {t:'探方号', cs:2, cls:'lbl'}, {t: state.fangHao, cs:6, cls:'val'},
+    {t:'单位号', cs:2, cls:'lbl'}, {t: state.unit, cs:8, cls:'val'},
+  ]);
+  // R2 堆积号/记录时间/记录者 —— 与 R1 完全对齐
+  rows.push([
+    {t:'堆积号', cs:2, cls:'lbl'}, {t: state.duiji, cs:4, cls:'val'},
+    {t:'记录时间', cs:2, cls:'lbl'}, {t: state.recordTime, cs:6, cls:'val'},
+    {t:'记录者', cs:2, cls:'lbl'}, {t: state.recorder, cs:8, cls:'val'},
+  ]);
+  // R3 地层关系 —— 列宽 2|6|6|10
+  rows.push([
+    {t:'地层关系', cs:2, cls:'lbl'},
+    {t: state.地层关系, cs:6, cls:'val'},
+    {t:'上层', cs:6, cls:'lbl'},
+    {t: state.上层, cs:10, cls:'val'},
+  ]);
+  // R4 高程栏头 —— 空(2) + 最高(6) + 最低(8) + 厚度(8) = 24；最低=厚度
+  rows.push([
+    {t:'', cs:2, cls:''},
+    {t:'最高', cs:6, cls:'ctr'},
+    {t:'最低', cs:8, cls:'ctr'},
+    {t:'厚度', cs:8, cls:'ctr'},
+  ]);
+  // R5 表面 —— 2 | 方位2+值4 | 方位2+值6 | 最厚4 | 最薄4 = 24
+  rows.push([
+    {t:'表面', cs:2, cls:'ctr'},
+    {t: state.surfaceHi, cs:2, cls:'ctr'}, {t: state.surfaceHiVal, cs:4, cls:'val'},
+    {t: state.surfaceLo, cs:2, cls:'ctr'}, {t: state.surfaceLoVal, cs:6, cls:'val'},
+    {t:'最厚', cs:4, cls:'ctr'},
+    {t:'最薄', cs:4, cls:'ctr'},
+  ]);
+  // R6 底面
+  rows.push([
+    {t:'底面', cs:2, cls:'ctr'},
+    {t: state.bottomHi, cs:2, cls:'ctr'}, {t: state.bottomHiVal, cs:4, cls:'val'},
+    {t: state.bottomLo, cs:2, cls:'ctr'}, {t: state.bottomLoVal, cs:6, cls:'val'},
+    {t: state.hou最厚, cs:4, cls:'ctr'},
+    {t: state.hou最薄, cs:4, cls:'ctr'},
+  ]);
+  if (isDiceng) {
+    rows.push([{t:'堆积描述', cs:24, cls:'sec'}]);
+    // 8 个 label 都不加粗（用 ctr 而非 lbl）
+    rows.push([
+      {t:'土色', cs:2, cls:'ctr'}, {t: colorCombo(), cs:4, cls:'val'},
+      {t:'土质', cs:2, cls:'ctr'}, {t: joinArr(state.soil), cs:4, cls:'val'},
+      {t:'土色编码', cs:2, cls:'ctr'}, {t: state.colorCode, cs:4, cls:'val'},
+      {t:'堆积性质', cs:2, cls:'ctr'}, {t: state.性质, cs:4, cls:'val'},
+    ]);
+    rows.push([
+      {t:'致密度', cs:2, cls:'ctr'}, {t: state.致密度, cs:4, cls:'val'},
+      {t:'形状', cs:2, cls:'ctr'}, {t: state.形状, cs:4, cls:'val'},
+      {t:'保存状态', cs:2, cls:'ctr'}, {t: state.保存状态, cs:4, cls:'val'},
+      {t:'发掘方式', cs:2, cls:'ctr'}, {t: state.发掘方式, cs:4, cls:'val'},
+    ]);
+    rows.push([{t:'包含物', cs:24, cls:'sec'}]);
+    // 包含物 子表头（不加粗）—— 8|4|6|6 = 24
+    rows.push([
+      {t:'内容', cs:8, cls:'ctr'},
+      {t:'含量（%）', cs:4, cls:'ctr'},
+      {t:'圆整度', cs:6, cls:'ctr'},
+      {t:'分选度', cs:6, cls:'ctr'},
+    ]);
+    const contains = state.contains || [];
+    (contains.length ? contains : [{}]).forEach(c => {
+      rows.push([
+        {t: c.内容 || '', cs:8, cls:'ctr'},
+        {t: c.含量 || '', cs:4, cls:'ctr'},
+        {t: c.圆整度 || '', cs:6, cls:'ctr'},
+        {t: c.分选度 || '', cs:6, cls:'ctr'},
+      ]);
+    });
+  } else {
+    // 形状描述：4 行 × 3 组 label-value；每组 label(3) + value(5) = 8；每行 3×8 = 24
+    // 三个 label 列纵向对齐：
+    //   Col-A: 平面形状 / 壁面 / 口部 / 底部
+    //   Col-B: 剖面形状 / 底面 / 最长 / 最长
+    //   Col-C: 器物     / 深度 / 最宽 / 最宽
+    rows.push([{t:'形状描述', cs:24, cls:'sec'}]);
+    rows.push([
+      {t:'平面形状', cs:3, cls:'ctr'}, {t: state.平面形状, cs:5, cls:'val'},
+      {t:'剖面形状', cs:3, cls:'ctr'}, {t: state.剖面形状, cs:5, cls:'val'},
+      {t:'器物',     cs:3, cls:'ctr'}, {t: state.器物,     cs:5, cls:'val'},
+    ]);
+    rows.push([
+      {t:'壁面', cs:3, cls:'ctr'}, {t: state.壁面, cs:5, cls:'val'},
+      {t:'底面', cs:3, cls:'ctr'}, {t: state.底面, cs:5, cls:'val'},
+      {t:'深度', cs:3, cls:'ctr'}, {t: state.深度, cs:5, cls:'val'},
+    ]);
+    rows.push([
+      {t:'口部', cs:3, cls:'ctr'}, {t: state.口部,   cs:5, cls:'val'},
+      {t:'最长', cs:3, cls:'ctr'}, {t: state.口最长, cs:5, cls:'val'},
+      {t:'最宽', cs:3, cls:'ctr'}, {t: state.口最宽, cs:5, cls:'val'},
+    ]);
+    rows.push([
+      {t:'底部', cs:3, cls:'ctr'}, {t: state.底部,   cs:5, cls:'val'},
+      {t:'最长', cs:3, cls:'ctr'}, {t: state.底最长, cs:5, cls:'val'},
+      {t:'最宽', cs:3, cls:'ctr'}, {t: state.底最宽, cs:5, cls:'val'},
+    ]);
+  }
+  // 全部采集
+  rows.push([{t:'全部采集', cs:24, cls:'sec'}]);
+  // 子表头不加粗 —— 2|8|2|6|4|2 = 24
+  const sampleHeader = () => [
+    {t:'种类', cs:2, cls:'ctr'},
+    {t:'样品号', cs:8, cls:'ctr'},
+    {t:'单位', cs:2, cls:'ctr'},
+    {t:'坐标（北东高）', cs:6, cls:'ctr'},
+    {t:'时间', cs:4, cls:'ctr'},
+    {t:'说明', cs:2, cls:'ctr'},
+  ];
+  const sampleRow = s => [
+    {t: s.种类 || '', cs:2, cls:'ctr'},
+    {t: s.样品号 || '', cs:8, cls:'ctr'},
+    {t: s.单位 || '', cs:2, cls:'ctr'},
+    {t: s.坐标 || '', cs:6, cls:'ctr'},
+    {t: s.时间 || '', cs:4, cls:'ctr'},
+    {t: s.说明 || '', cs:2, cls:'ctr'},
+  ];
+  rows.push(sampleHeader());
+  const bulk = state.bulk_samples || [];
+  (bulk.length ? bulk : [{}]).forEach(s => rows.push(sampleRow(s)));
+  // 样品采集
+  rows.push([{t:'样品采集', cs:24, cls:'sec'}]);
+  rows.push(sampleHeader());
+  const spec = state.specimen_samples || [];
+  (spec.length ? spec : [{}]).forEach(s => rows.push(sampleRow(s)));
+  // 备注
+  rows.push([{t:'备注', cs:24, cls:'sec'}]);
+  rows.push([{t: state.notes, cs:24, cls:'val', style:'min-height:40pt;white-space:pre-wrap;text-align:left'}]);
+  return rows;
+}
+
+function buildTableHTML() {
+  const rows = buildRows();
+  let html = `<div class="head">发掘记录表</div>`;
+  html += `<table><colgroup>` + Array(GRID).fill(`<col style="width:${(100/GRID).toFixed(4)}%">`).join('') + `</colgroup><tbody>`;
+  rows.forEach(cells => {
+    html += '<tr>';
+    cells.forEach(c => {
+      const cls = c.cls ? ` class="${c.cls}"` : '';
+      const st = c.style ? ` style="${c.style}"` : '';
+      const cs = c.cs && c.cs > 1 ? ` colspan="${c.cs}"` : '';
+      const inner = c.raw ? (c.t || '') : (esc(c.t || '') || '&nbsp;');
+      html += `<td${cls}${cs}${st}>${inner}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+function renderPreview() {
+  document.getElementById('preview').innerHTML = buildTableHTML();
+}
+
+/* ============ 导出：Word (真·.docx) —— 严格按样表体例 ============ */
+async function exportWord() {
+  const html = `<!DOCTYPE html><html xmlns:o='urn:schemas-microsoft-com:office:office'
+xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset='utf-8'><title>发掘记录表</title>
+<style>
+@page { size: A4; margin: 2cm 1.8cm; }
+body { font-family:"SimSun","宋体",serif; font-size:10.5pt; color:#000; }
+.head { text-align:center; font-family:"SimHei","黑体",sans-serif; font-size:16pt; padding:0 0 8pt 0; }
+table { border-collapse:collapse; width:100%; }
+table, td { border:0.5pt solid #000; }
+td { padding:3pt 4pt; vertical-align:middle; font-size:10.5pt; }
+td.lbl { font-weight:bold; text-align:center; }
+td.sec { text-align:left; font-weight:bold; padding-left:6pt; }
+td.ctr { text-align:center; }
+</style></head><body>${buildTableHTML()}</body></html>`;
+  try {
+    const blob = window.htmlDocx.asBlob(html, {orientation:'portrait', margins:{top:1134, right:1020, bottom:1134, left:1020}});
+    await smartSave(getFileBase() + '.docx', blob);
+  } catch (err) {
+    alert('Word 导出失败：' + (err && err.message ? err.message : err));
+  }
+}
+
+/* ============ 导出：Excel (SheetJS) ============ */
+function exportExcel() {
+  const isDiceng = state.__type === 'diceng';
+  const rows = [];
+  rows.push([isDiceng ? '地层发掘记录表' : '遗迹发掘记录表']);
+  rows.push(['年度', state.year, '', '遗址名称', state.site]);
+  rows.push(['分区号', state.district, '探方号', state.fangHao, '单位号', state.unit]);
+  rows.push(['堆积号', state.duiji, '记录时间', state.recordTime, '记录者', state.recorder]);
+  rows.push(['地层关系·上层', state.上层]);
+  rows.push(['表面·最高', state.surfaceHi + ' ' + state.surfaceHiVal, '表面·最低', state.surfaceLo + ' ' + state.surfaceLoVal]);
+  rows.push(['底面·最高', state.bottomHi + ' ' + state.bottomHiVal, '底面·最低', state.bottomLo + ' ' + state.bottomLoVal]);
+  rows.push(['最厚', state.hou最厚, '最薄', state.hou最薄]);
+  if (isDiceng) {
+    rows.push(['-- 堆积描述 --']);
+    rows.push(['土色', colorCombo()]);
+    rows.push(['土色编码', state.colorCode]);
+    rows.push(['土质', joinArr(state.soil)]);
+    rows.push(['堆积性质', state.性质]);
+    rows.push(['致密度', state.致密度, '形状', state.形状]);
+    rows.push(['保存状态', state.保存状态, '发掘方式', state.发掘方式]);
+    rows.push(['-- 包含物 --']);
+    rows.push(['内容', '含量(%)', '圆整度', '分选度']);
+    (state.contains || []).forEach(c => rows.push([c.内容, c.含量, c.圆整度, c.分选度]));
+  } else {
+    rows.push(['-- 形状描述 --']);
+    rows.push(['平面形状', state.平面形状, '剖面形状', state.剖面形状]);
+    rows.push(['深度', state.器物深度, '最长', state.最长, '最宽', state.最宽]);
+    rows.push(['壁面', state.壁面, '底面', state.底面]);
+    rows.push(['口部', state.口部, '底部', state.底部]);
+  }
+  rows.push(['-- 全部采集 --']);
+  rows.push(['种类', '样品号', '单位', '坐标(北东高)', '时间', '说明']);
+  (state.bulk_samples || []).forEach(s => rows.push([s.种类, s.样品号, s.单位, s.坐标, s.时间, s.说明]));
+  rows.push(['-- 样品采集 --']);
+  rows.push(['种类', '样品号', '单位', '坐标(北东高)', '时间', '说明']);
+  (state.specimen_samples || []).forEach(s => rows.push([s.种类, s.样品号, s.单位, s.坐标, s.时间, s.说明]));
+  rows.push(['备注', state.notes]);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:20},{wch:12},{wch:18},{wch:12},{wch:18}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, isDiceng ? '地层' : '遗迹');
+  const arrBuf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([arrBuf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  smartSave(getFileBase() + '.xlsx', blob);
+}
+
+/* ============ 导出：PDF ============ */
+async function exportPDF() {
+  // 把预览克隆到离屏容器（避免 sticky/暗色主题干扰 html2canvas，强制白底黑字）
+  const src = document.getElementById('preview');
+  const clone = src.cloneNode(true);
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText =
+    'position:absolute;left:-10000px;top:0;width:794px;background:#ffffff;color:#000;' +
+    'padding:56px 45px;font-family:"SimSun","Songti SC","STSong",serif;font-size:14px;line-height:1.35;';
+  wrapper.innerHTML = `
+    <style>
+      #_pdfroot .head{text-align:center;font-family:"SimHei","Heiti SC","STHeiti",sans-serif;font-size:22px;padding:0 0 10px 0;}
+      #_pdfroot table{width:100%;border-collapse:collapse;border:1px solid #000;table-layout:fixed;}
+      #_pdfroot table td{border:1px solid #000;padding:4px 5px;vertical-align:middle;font-size:14px;word-break:break-all;overflow-wrap:anywhere;color:#000;}
+      #_pdfroot td.lbl{font-weight:bold;text-align:center;}
+      #_pdfroot td.sec{text-align:left;font-weight:bold;padding-left:8px;}
+      #_pdfroot td.ctr{text-align:center;}
+    </style>
+  `;
+  const inner = document.createElement('div');
+  inner.id = '_pdfroot';
+  inner.appendChild(clone);
+  wrapper.appendChild(inner);
+  document.body.appendChild(wrapper);
+
+  const opt = {
+    margin: [10, 8, 10, 8],
+    filename: getFileBase() + '.pdf',
+    image: {type:'jpeg', quality:0.95},
+    html2canvas: {scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false},
+    jsPDF: {unit:'mm', format:'a4', orientation:'portrait'},
+    pagebreak: {mode: ['avoid-all', 'css', 'legacy']},
+  };
+  try {
+    // 关键：必须先 .toPdf() 让内部管线构建 jsPDF 实例，然后才能 output('blob')
+    const worker = html2pdf().set(opt).from(inner).toPdf();
+    if (window.claude && typeof window.claude.use === 'function') {
+      const pdf = await worker.get('pdf');
+      const blob = pdf.output('blob');
+      await smartSave(getFileBase() + '.pdf', blob);
+    } else {
+      await worker.save();
+    }
+  } catch (err) {
+    console.error('PDF export error', err);
+    alert('PDF 导出失败：' + (err && err.message ? err.message : err));
+  } finally {
+    wrapper.remove();
+  }
+}
+
+/* ============ 草稿存取 ============ */
+function saveDraft() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  smartSave(getFileBase() + '.json', blob);
+}
+function loadDraft(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const obj = JSON.parse(r.result);
+      state = obj;
+      currentTab = state.__type || 'diceng';
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === currentTab));
+      renderForm(); renderPreview();
+    } catch (err) { alert('无法解析该文件：' + err.message); }
+  };
+  r.readAsText(file);
+  e.target.value = '';
+}
+function resetForm() {
+  state = currentTab === 'diceng' ? defaultDiceng() : defaultYiji();
+  renderForm(); renderPreview();
+}
+function getFileBase() {
+  const parts = [state.year, state.fangHao || '未填探方', state.duiji || '未填堆积号', state.__type === 'diceng' ? '地层' : '遗迹'];
+  return parts.filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g, '_');
+}
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+}
+/* 统一走 downloads 能力；不可用时（如本地打开文件）回落到浏览器下载 */
+let _downloadsCap = undefined; // undefined = 未尝试; null = 不可用
+async function getDownloads() {
+  if (_downloadsCap !== undefined) return _downloadsCap;
+  try {
+    if (window.claude && typeof window.claude.use === 'function') {
+      _downloadsCap = await window.claude.use('downloads');
+    } else {
+      _downloadsCap = null;
+    }
+  } catch (e) { _downloadsCap = null; }
+  return _downloadsCap;
+}
+async function smartSave(filename, data) {
+  const dl = await getDownloads();
+  if (dl && typeof dl.save === 'function') {
+    try {
+      await dl.save({filename, data});
+      return;
+    } catch (err) {
+      if (err && err.code === 'declined') return; // 用户取消，静默
+      if (err && err.code === 'rejected_extension') {
+        alert('该文件扩展名不被允许：' + filename);
+        return;
+      }
+      // 其他错误：回落到浏览器下载
+      console.warn('downloads.save failed, fallback', err);
+    }
+  }
+  if (data instanceof Blob) downloadBlob(data, filename);
+  else downloadBlob(new Blob([data]), filename);
+}
+
+/* ============ 主题切换 ============ */
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+}
+
+/* ============ Tab 切换 ============ */
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    if (t.dataset.tab === currentTab) return;
+    if (!confirm('切换记录类型将保留基本信息，但清空当前表专属字段。是否继续？')) return;
+    const common = {
+      year: state.year, site: state.site, district: state.district,
+      fangHao: state.fangHao, unit: state.unit, duiji: state.duiji,
+      recordTime: state.recordTime, recorder: state.recorder,
+      地层关系: state.地层关系, 上层: state.上层,
+      surfaceHi: state.surfaceHi, surfaceHiVal: state.surfaceHiVal,
+      surfaceLo: state.surfaceLo, surfaceLoVal: state.surfaceLoVal,
+      bottomHi: state.bottomHi, bottomHiVal: state.bottomHiVal,
+      bottomLo: state.bottomLo, bottomLoVal: state.bottomLoVal,
+      hou最厚: state.hou最厚, hou最薄: state.hou最薄,
+      bulk_samples: state.bulk_samples || [],
+      specimen_samples: state.specimen_samples || [],
+      notes: state.notes,
+    };
+    currentTab = t.dataset.tab;
+    state = currentTab === 'diceng' ? {...defaultDiceng(), ...common} : {...defaultYiji(), ...common};
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    renderForm(); renderPreview();
+  };
+});
+
+/* ============ 启动 ============ */
+renderForm();
+renderPreview();
+</script>
+</body>
+</html>
