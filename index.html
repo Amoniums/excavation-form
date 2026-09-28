@@ -308,6 +308,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
 <script>
 /* ============ 数据字典（从样表提取） ============ */
 const DICT = {
@@ -827,12 +828,104 @@ function renderPreview() {
 }
 
 /* ============ 导出：Word ============
-   桌面用真·.docx (html-docx-js)；iOS 用 Word 兼容 HTML (.doc)，Word / Pages 均可直接打开。 */
+   主路径：docx 库直接构建真·.docx（跨平台稳定）
+   降级：html-docx-js
+   最终降级：HTML-伪装-.doc */
+async function buildDocxBlob() {
+  if (typeof window.docx === 'undefined') throw new Error('docx 库未加载');
+  const D = window.docx;
+  const rows = buildRows();
+
+  // 页面/边距（DXA = 1/20 pt = 1/1440 inch；A4 宽 210mm ≈ 11907）
+  const PAGE_W = 11907, PAGE_H = 16839, MARGIN = 1134;
+  const CONTENT_W = PAGE_W - 2 * MARGIN;            // ≈ 9639
+  const UNIT = Math.floor(CONTENT_W / 24);          // 每 1 列宽度
+  const BORDER = { style: D.BorderStyle.SINGLE, size: 4, color: '000000' };
+  const CELL_BORDERS = { top:BORDER, bottom:BORDER, left:BORDER, right:BORDER };
+
+  function run(text, opts = {}) {
+    return new D.TextRun({
+      text: text || '',
+      bold: !!opts.bold,
+      font: { name: opts.font || '宋体', eastAsia: opts.font || '宋体' },
+      size: opts.size || 21,  // 半点数，21 = 10.5pt
+    });
+  }
+
+  function cellToDocx(cell) {
+    const cs = cell.cs || 1;
+    const cls = cell.cls || '';
+    const bold = cls.includes('lbl') || cls.includes('sec');
+    let alignment;
+    if (cls.includes('sec')) alignment = D.AlignmentType.LEFT;
+    else if (cls.includes('lbl') || cls.includes('ctr')) alignment = D.AlignmentType.CENTER;
+    else alignment = D.AlignmentType.LEFT;
+
+    // R0 那种带 <b>...</b> 的原始 HTML，按标签切分成多个 TextRun
+    let runs;
+    if (cell.raw && cell.t) {
+      const parts = cell.t.split(/(<b>[^<]*<\/b>)/);
+      runs = parts.filter(p => p).map(p => {
+        const isBold = p.startsWith('<b>');
+        const text = p.replace(/<\/?b>/g, '');
+        return run(text, { bold: isBold });
+      });
+    } else {
+      runs = [run(cell.t || '', { bold })];
+    }
+
+    return new D.TableCell({
+      children: [new D.Paragraph({ children: runs, alignment })],
+      columnSpan: cs,
+      width: { size: UNIT * cs, type: D.WidthType.DXA },
+      verticalAlign: D.VerticalAlign.CENTER,
+      borders: CELL_BORDERS,
+    });
+  }
+
+  const docxRows = rows.map(cells => new D.TableRow({
+    children: cells.map(cellToDocx),
+  }));
+
+  const table = new D.Table({
+    rows: docxRows,
+    width: { size: CONTENT_W, type: D.WidthType.DXA },
+    columnWidths: Array(24).fill(UNIT),
+    borders: {
+      top: BORDER, bottom: BORDER, left: BORDER, right: BORDER,
+      insideHorizontal: BORDER, insideVertical: BORDER,
+    },
+  });
+
+  const title = new D.Paragraph({
+    alignment: D.AlignmentType.CENTER,
+    spacing: { after: 200 },
+    children: [new D.TextRun({
+      text: '发掘记录表',
+      font: { name: '黑体', eastAsia: '黑体' },
+      size: 32,  // 16pt
+    })],
+  });
+
+  const doc = new D.Document({
+    creator: '发掘记录表生成器',
+    sections: [{
+      properties: {
+        page: {
+          size: { width: PAGE_W, height: PAGE_H },
+          margin: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN },
+        },
+      },
+      children: [title, table],
+    }],
+  });
+  return await D.Packer.toBlob(doc);
+}
+
 function buildWordHTML() {
   return `<!DOCTYPE html><html xmlns:o='urn:schemas-microsoft-com:office:office'
 xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head><meta charset='utf-8'><title>发掘记录表</title>
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
 @page { size: A4; margin: 2cm 1.8cm; }
 body { font-family:"SimSun","宋体",serif; font-size:10.5pt; color:#000; }
@@ -845,34 +938,40 @@ td.sec { text-align:left; font-weight:bold; padding-left:6pt; }
 td.ctr { text-align:center; }
 </style></head><body>${buildTableHTML()}</body></html>`;
 }
+
 async function exportWord() {
-  const html = buildWordHTML();
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // 第一路径：docx 库
   try {
-    if (isIOS || !window.htmlDocx || typeof window.htmlDocx.asBlob !== 'function') {
-      // iOS 或 html-docx-js 缺失：用 Word 兼容 HTML (.doc)
-      const blob = new Blob(['﻿' + html], {type: 'application/msword'});
-      await smartSave(getFileBase() + '.doc', blob);
+    const blob = await buildDocxBlob();
+    if (blob && blob.size > 1000) {
+      await smartSave(getFileBase() + '.docx', blob);
       return;
     }
-    const blob = window.htmlDocx.asBlob(html, {orientation:'portrait', margins:{top:1134, right:1020, bottom:1134, left:1020}});
-    if (!blob || blob.size < 200) {
-      // .docx 生成失败，自动降级到 .doc
-      console.warn('html-docx-js 输出异常，降级到 HTML-Word (.doc)');
-      const fallback = new Blob(['﻿' + html], {type: 'application/msword'});
-      await smartSave(getFileBase() + '.doc', fallback);
-      return;
-    }
-    await smartSave(getFileBase() + '.docx', blob);
+    console.warn('docx blob 体积异常:', blob && blob.size);
   } catch (err) {
-    console.error('Word export error', err);
-    // 出错也降级到 .doc
-    try {
-      const fallback = new Blob(['﻿' + html], {type: 'application/msword'});
-      await smartSave(getFileBase() + '.doc', fallback);
-    } catch (err2) {
-      alert('Word 导出失败：' + (err && err.message ? err.message : err));
+    console.warn('docx 库不可用，尝试降级 html-docx-js:', err);
+  }
+  // 第二路径：html-docx-js
+  try {
+    if (window.htmlDocx && typeof window.htmlDocx.asBlob === 'function') {
+      const html = buildWordHTML();
+      const blob = window.htmlDocx.asBlob(html);
+      if (blob && blob.size > 200) {
+        await smartSave(getFileBase() + '.docx', blob);
+        return;
+      }
     }
+  } catch (err) {
+    console.warn('html-docx-js 也失败，降级 HTML-.doc:', err);
+  }
+  // 最终降级：HTML-.doc
+  try {
+    const html = buildWordHTML();
+    const blob = new Blob([html], {type: 'application/msword'});
+    await smartSave(getFileBase() + '.doc', blob);
+  } catch (err) {
+    alert('Word 导出全部失败：' + (err && err.message ? err.message : err));
+    console.error('全部导出路径失败:', err);
   }
 }
 
@@ -1124,9 +1223,10 @@ renderPreview();
 /* 检查 CDN 库加载情况；如果有失败在页面顶部提示 */
 setTimeout(() => {
   const status = {
-    'XLSX (Excel 导出)': typeof window.XLSX !== 'undefined',
-    'html2pdf (PDF 导出)': typeof window.html2pdf === 'function',
-    'html-docx-js (Word 导出)': !!(window.htmlDocx && window.htmlDocx.asBlob),
+    'XLSX (Excel)': typeof window.XLSX !== 'undefined',
+    'html2pdf (PDF)': typeof window.html2pdf === 'function',
+    'docx (Word 主)': typeof window.docx !== 'undefined',
+    'html-docx-js (Word 兜底)': !!(window.htmlDocx && window.htmlDocx.asBlob),
   };
   const missing = Object.entries(status).filter(([_,ok]) => !ok).map(([k]) => k);
   console.log('导出库加载状态：', status);
