@@ -239,6 +239,15 @@ main {
 .preview td.val { min-height: 22pt; }
 .preview td.empty { color: #999; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+/* 打印模式：只保留预览，页面其他部分全部隐藏 */
+@media print {
+  html, body { background: white !important; }
+  header, .tabs, #form-panel, .preview-wrap > .card > div:first-child, .preview-wrap > .card > div:last-child { display: none !important; }
+  .preview-wrap { position: static !important; max-height: none !important; overflow: visible !important; }
+  .preview-wrap > .card { border: none !important; }
+  .preview { padding: 8mm !important; box-shadow: none !important; }
+  main { display: block !important; padding: 0 !important; max-width: none !important; }
+}
 .value-summary { font-size: 12px; color: var(--accent-ink); margin-top: 4px; min-height: 16px; }
 .toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .toggle-theme { margin-left: auto; }
@@ -901,12 +910,23 @@ function exportExcel() {
   smartSave(getFileBase() + '.xlsx', blob);
 }
 
-/* ============ 导出：PDF ============ */
+/* ============ 导出：PDF ============
+   移动端：走浏览器原生打印，弹出系统打印面板 → 用户选"存储为 PDF"
+   桌面端：走 html2pdf + jsPDF 直接生成 blob → 下载 */
 async function exportPDF() {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    // 移动端：调用系统打印，在打印面板里可以直接存为 PDF / AirDrop / 分享
+    try {
+      window.print();
+    } catch (e) {
+      alert('打印/存 PDF 失败：' + (e && e.message ? e.message : e));
+    }
+    return;
+  }
+  // 桌面端保留原方案：html2canvas + jsPDF
   const src = document.getElementById('preview');
   const clone = src.cloneNode(true);
-  // 加半透明遮罩：让渲染容器在 iOS 上真实可见（保证 html2canvas 能拍到），
-  // 用户只看到"正在生成 PDF"的遮罩，不看到闪现的表格
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;' +
     'align-items:center;justify-content:center;color:#fff;font-size:16px;';
@@ -915,9 +935,8 @@ async function exportPDF() {
 
   const wrapper = document.createElement('div');
   wrapper.style.cssText =
-    'position:fixed;left:0;top:0;width:794px;background:#ffffff;color:#000;' +
-    'padding:56px 45px;font-family:"SimSun","Songti SC","STSong",serif;font-size:14px;line-height:1.35;' +
-    'z-index:9998;';  // 在遮罩之下，但确保被真实渲染
+    'position:fixed;left:-10000px;top:0;width:794px;background:#ffffff;color:#000;' +
+    'padding:56px 45px;font-family:"SimSun","Songti SC","STSong",serif;font-size:14px;line-height:1.35;';
   wrapper.innerHTML = `
     <style>
       #_pdfroot .head{text-align:center;font-family:"SimHei","Heiti SC","STHeiti",sans-serif;font-size:22px;padding:0 0 10px 0;}
